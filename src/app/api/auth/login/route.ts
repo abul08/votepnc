@@ -45,16 +45,16 @@ export async function POST(request: NextRequest) {
         getAll() {
           return request.cookies.getAll();
         },
-        setAll(cookiesToSet) {
+        setAll(cookiesToSet: { name: string; value: string; options?: Record<string, unknown> }[]) {
           cookiesToSet.forEach(({ name, value, options }) => {
             response.cookies.set({
               name,
               value,
               ...options,
-              httpOnly: options?.httpOnly ?? true,
+              httpOnly: (options?.httpOnly as boolean) ?? true,
               secure: process.env.NODE_ENV === "production",
-              sameSite: options?.sameSite ?? "lax",
-              path: options?.path ?? "/",
+              sameSite: (options?.sameSite as "lax" | "strict" | "none") ?? "lax",
+              path: (options?.path as string) ?? "/",
             });
           });
         },
