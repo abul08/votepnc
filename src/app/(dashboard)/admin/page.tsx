@@ -134,24 +134,7 @@ async function DashboardStats() {
           </CardContent>
         </Card>
 
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-base sm:text-lg">Top Creators</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <ul className="space-y-2 sm:space-y-3">
-              {topCreatorIds.length === 0 && (
-                <li className="text-muted-foreground text-sm">No data yet.</li>
-              )}
-              {topCreatorIds.map((id) => (
-                <li key={id} className="flex items-center justify-between text-sm gap-2">
-                  <span className="font-medium truncate">{creatorMap.get(id) ?? id.slice(0, 8)}</span>
-                  <span className="text-muted-foreground whitespace-nowrap">{counts.get(id) ?? 0} voters</span>
-                </li>
-              ))}
-            </ul>
-          </CardContent>
-        </Card>
+
       </div>
     </>
   );
