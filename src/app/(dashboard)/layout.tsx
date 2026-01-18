@@ -1,9 +1,7 @@
 import Link from "next/link";
 
-import { Button } from "@/components/ui/button";
 import { getUserRole, requireUser } from "@/lib/auth";
-
-import { signOutAction } from "./actions";
+import { LogoutButton } from "@/components/logout-button";
 
 export default async function DashboardLayout({
   children,
@@ -20,46 +18,47 @@ export default async function DashboardLayout({
           { href: "/admin/users", label: "Users" },
           { href: "/admin/candidates", label: "Candidates" },
           { href: "/admin/voters", label: "Voters" },
-          { href: "/admin/voters/import", label: "CSV Import" },
+          { href: "/admin/voters/import", label: "Import" },
+          { href: "/admin/edit-requests", label: "Approvals" },
           { href: "/admin/activity", label: "Activity" },
         ]
       : [
-          { href: "/candidate", label: "Overview" },
           { href: "/candidate/voters", label: "Voters" },
         ];
 
   return (
-    <div className="min-h-screen">
-      <header className="border-b border-slate-200 bg-white">
-        <div className="mx-auto flex w-full max-w-6xl items-center justify-between gap-4 px-4 py-4">
-          <div className="flex items-center gap-4">
-            <span className="text-sm font-semibold text-slate-900">
-              Maldives Voter DB
+    <div className="min-h-screen bg-background">
+      <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+        <div className="flex h-14 items-center justify-between px-4 sm:px-6">
+          <div className="flex items-center gap-2 sm:gap-4">
+            <Link href={role === "admin" ? "/admin" : "/candidate"} className="flex items-center gap-2">
+              <span className="font-bold text-sm sm:text-base truncate">Voter DB</span>
+            </Link>
+            <span className="hidden sm:inline-flex rounded-full bg-secondary px-2.5 py-0.5 text-xs font-medium capitalize text-secondary-foreground">
+              {role}
             </span>
-            <span className="text-xs text-slate-500 capitalize">{role ?? ""}</span>
           </div>
-          <form action={signOutAction}>
-            <Button type="submit" variant="outline">
-              Sign out
-            </Button>
-          </form>
+          <LogoutButton />
         </div>
-        <nav className="mx-auto w-full max-w-6xl px-4 pb-3">
-          <ul className="flex flex-wrap gap-2 text-sm">
-            {navLinks.map((link) => (
-              <li key={link.href}>
-                <Link
-                  href={link.href}
-                  className="rounded-full border border-slate-200 px-3 py-1 text-slate-700 transition hover:bg-slate-100"
-                >
-                  {link.label}
-                </Link>
-              </li>
-            ))}
-          </ul>
-        </nav>
       </header>
-      <main className="mx-auto w-full max-w-6xl px-4 py-6">{children}</main>
+      
+      {role === "admin" && (
+        <nav className="border-b bg-muted/40 overflow-x-auto">
+          <div className="flex gap-1 px-4 sm:px-6 py-2 min-w-max">
+            {navLinks.map((link) => (
+              <Link
+                key={link.href}
+                href={link.href}
+                className="rounded-md px-3 py-1.5 text-sm font-medium text-muted-foreground transition-colors hover:bg-background hover:text-foreground whitespace-nowrap"
+              >
+                {link.label}
+              </Link>
+            ))}
+          </div>
+        </nav>
+      )}
+
+      <main className="px-4 sm:px-6 py-4 sm:py-6">{children}</main>
     </div>
   );
 }

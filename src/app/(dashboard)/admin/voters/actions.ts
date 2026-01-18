@@ -2,50 +2,125 @@
 
 import { revalidatePath } from "next/cache";
 
-import { createSupabaseServerClient } from "@/lib/supabase/server";
-import { requireRole } from "@/lib/auth";
+import { createSupabaseAdminClient } from "@/lib/supabase/admin";
+import { requireRole, getSessionUser } from "@/lib/auth";
 
 export async function createVoterAction(formData: FormData) {
-  await requireRole("admin");
-  const payload = {
-    sumaaru: String(formData.get("sumaaru") ?? ""),
-    name: String(formData.get("name") ?? ""),
-    address: String(formData.get("address") ?? ""),
-    phone: String(formData.get("phone") ?? ""),
-    sex: String(formData.get("sex") ?? ""),
-    nid: String(formData.get("nid") ?? ""),
-    present_location: String(formData.get("present_location") ?? ""),
-    registered_box: String(formData.get("registered_box") ?? ""),
-    job_in: String(formData.get("job_in") ?? ""),
-    job_by: String(formData.get("job_by") ?? ""),
-  };
+  try {
+    await requireRole("admin");
+    const user = await getSessionUser();
+    
+    const sumaaru = String(formData.get("sumaaru") ?? "").trim();
+    const name = String(formData.get("name") ?? "").trim();
 
-  const supabase = createSupabaseServerClient();
-  await supabase.from("voters").insert(payload);
-  revalidatePath("/admin/voters");
-  return { success: true };
+    if (!sumaaru || !name) {
+      return { error: "Sumaaru and name are required." };
+    }
+
+    const payload = {
+      sumaaru,
+      name,
+      address: String(formData.get("address") ?? "") || null,
+      phone: String(formData.get("phone") ?? "") || null,
+      sex: String(formData.get("sex") ?? "") || null,
+      nid: String(formData.get("nid") ?? "") || null,
+      present_location: String(formData.get("present_location") ?? "") || null,
+      registered_box: String(formData.get("registered_box") ?? "") || null,
+      job_in: String(formData.get("job_in") ?? "") || null,
+      job_by: String(formData.get("job_by") ?? "") || null,
+      created_by: user?.id,
+    };
+
+    const adminClient = createSupabaseAdminClient();
+    const { error } = await adminClient.from("voters").insert(payload);
+    
+    if (error) {
+      return { error: error.message };
+    }
+
+    revalidatePath("/admin/voters");
+    return { success: true };
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "An error occurred." };
+  }
 }
 
 export async function deleteVoterAction(formData: FormData) {
-  await requireRole("admin");
-  const voterId = String(formData.get("voterId") ?? "");
-  const supabase = createSupabaseServerClient();
-  await supabase.from("voters").delete().eq("id", voterId);
-  revalidatePath("/admin/voters");
-  return { success: true };
+  try {
+    await requireRole("admin");
+    const voterId = String(formData.get("voterId") ?? "");
+
+    if (!voterId) {
+      return { error: "Voter ID is required." };
+    }
+
+    const adminClient = createSupabaseAdminClient();
+    const { error } = await adminClient.from("voters").delete().eq("id", voterId);
+    
+    if (error) {
+      return { error: error.message };
+    }
+
+    revalidatePath("/admin/voters");
+    return { success: true };
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "An error occurred." };
+  }
 }
 
-export async function assignVoterAction(formData: FormData) {
-  await requireRole("admin");
-  const voterId = String(formData.get("voterId") ?? "");
-  const candidateId = String(formData.get("candidateId") ?? "");
-  const supabase = createSupabaseServerClient();
+export async function updateVoterAction(formData: FormData) {
+  try {
+    await requireRole("admin");
+    const user = await getSessionUser();
+    const voterId = String(formData.get("voterId") ?? "");
 
-  await supabase.from("voter_assignments").upsert({
-    voter_id: voterId,
-    candidate_id: candidateId,
-  });
+    if (!voterId) {
+      return { error: "Voter ID is required." };
+    }
 
-  revalidatePath("/admin/voters");
-  return { success: true };
+    const sumaaru = String(formData.get("sumaaru") ?? "").trim();
+    const name = String(formData.get("name") ?? "").trim();
+
+    if (!sumaaru || !name) {
+      return { error: "Sumaaru and name are required." };
+    }
+
+    const payload = {
+      sumaaru,
+      name,
+      address: String(formData.get("address") ?? "") || null,
+      phone: String(formData.get("phone") ?? "") || null,
+      sex: String(formData.get("sex") ?? "") || null,
+      nid: String(formData.get("nid") ?? "") || null,
+      present_location: String(formData.get("present_location") ?? "") || null,
+      registered_box: String(formData.get("registered_box") ?? "") || null,
+      job_in: String(formData.get("job_in") ?? "") || null,
+      job_by: String(formData.get("job_by") ?? "") || null,
+      updated_by: user?.id,
+    };
+
+    const adminClient = createSupabaseAdminClient();
+    const { error } = await adminClient
+      .from("voters")
+      .update(payload)
+      .eq("id", voterId);
+    
+    if (error) {
+      return { error: error.message };
+    }
+
+    // Log activity
+    if (user) {
+      await adminClient.from("activity_log").insert({
+        user_id: user.id,
+        action: "voter_updated",
+        metadata: { voter_id: voterId },
+      });
+    }
+
+    revalidatePath("/admin/voters");
+    return { success: true };
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "An error occurred." };
+  }
 }

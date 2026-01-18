@@ -12,7 +12,7 @@ export async function createCandidateAction(formData: FormData) {
   const phone = String(formData.get("phone") ?? "");
   const position = String(formData.get("position") ?? "");
 
-  const supabase = createSupabaseServerClient();
+  const supabase = await createSupabaseServerClient();
   await supabase.from("candidates").insert({
     user_id: userId,
     name,
@@ -28,7 +28,7 @@ export async function deleteCandidateAction(formData: FormData) {
   await requireRole("admin");
   const candidateId = String(formData.get("candidateId") ?? "");
 
-  const supabase = createSupabaseServerClient();
+  const supabase = await createSupabaseServerClient();
   await supabase.from("candidates").delete().eq("id", candidateId);
 
   revalidatePath("/admin/candidates");
@@ -40,18 +40,15 @@ export async function updateCandidatePermissionsAction(formData: FormData) {
   const candidateId = String(formData.get("candidateId") ?? "");
   const fields = formData.getAll("fields").map((value) => String(value));
 
-  const supabase = createSupabaseServerClient();
-  await supabase.from("candidate_permissions").delete().eq("candidate_id", candidateId);
-
-  if (fields.length > 0) {
-    await supabase.from("candidate_permissions").insert(
-      fields.map((field) => ({
-        candidate_id: candidateId,
-        field,
-        can_edit: true,
-      })),
-    );
-  }
+  const supabase = await createSupabaseServerClient();
+  
+  // Upsert permissions with allowed_fields array
+  await supabase
+    .from("candidate_permissions")
+    .upsert({
+      candidate_id: candidateId,
+      allowed_fields: fields,
+    }, { onConflict: "candidate_id" });
 
   revalidatePath("/admin/candidates");
   return { success: true };

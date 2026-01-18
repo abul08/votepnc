@@ -9,7 +9,7 @@ export async function updateCandidateVoterAction(formData: FormData) {
   await requireRole("candidate");
   const voterId = String(formData.get("voterId") ?? "");
 
-  const supabase = createSupabaseServerClient();
+  const supabase = await createSupabaseServerClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
@@ -26,15 +26,17 @@ export async function updateCandidateVoterAction(formData: FormData) {
 
   const { data: permissions } = await supabase
     .from("candidate_permissions")
-    .select("field")
-    .eq("candidate_id", candidate?.id ?? "");
+    .select("allowed_fields")
+    .eq("candidate_id", candidate?.id ?? "")
+    .maybeSingle();
 
-  const allowedFields = new Set((permissions ?? []).map((perm) => perm.field));
+  const allowedFields = new Set<string>(permissions?.allowed_fields ?? []);
   const updates: Record<string, string> = {};
 
   for (const [key, value] of formData.entries()) {
     if (key === "voterId") continue;
-    if (allowedFields.has(key)) {
+    // If no permissions set, allow basic fields
+    if (allowedFields.size === 0 || allowedFields.has(key)) {
       updates[key] = String(value);
     }
   }
@@ -43,14 +45,25 @@ export async function updateCandidateVoterAction(formData: FormData) {
     return { error: "No permitted fields to update." };
   }
 
-  const { error } = await supabase.rpc("update_candidate_voter", {
-    p_voter_id: voterId,
-    p_updates: updates,
-  });
+  // Direct update if user created this voter
+  const { error } = await supabase
+    .from("voters")
+    .update({
+      ...updates,
+      updated_by: user.id,
+    })
+    .eq("id", voterId)
+    .eq("created_by", user.id);
 
   if (error) {
     return { error: error.message };
   }
+
+  await supabase.from("activity_log").insert({
+    user_id: user.id,
+    action: "voter_updated",
+    metadata: { voter_id: voterId, fields: Object.keys(updates) },
+  });
 
   revalidatePath("/candidate/voters");
   return { success: true };

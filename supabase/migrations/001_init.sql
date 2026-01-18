@@ -1,318 +1,330 @@
-create extension if not exists "uuid-ossp";
+-- Enable UUID extension
+CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
-create type public.user_role as enum ('admin', 'candidate');
+-- Create enum for user roles
+CREATE TYPE user_role AS ENUM ('admin', 'candidate');
 
-create table if not exists public.users (
-  id uuid primary key references auth.users (id) on delete cascade,
-  username text not null unique,
-  password_hash text,
-  role public.user_role not null default 'candidate',
-  created_at timestamptz not null default now()
+-- Users table (extends Supabase auth.users)
+CREATE TABLE public.users (
+  id UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
+  username TEXT UNIQUE,
+  email TEXT,
+  role user_role NOT NULL DEFAULT 'candidate',
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-create table if not exists public.candidates (
-  id uuid primary key default uuid_generate_v4(),
-  user_id uuid not null references public.users (id) on delete cascade,
-  name text not null,
-  phone text,
-  position text,
-  created_at timestamptz not null default now()
+-- Candidates table
+CREATE TABLE public.candidates (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  user_id UUID NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
+  name TEXT NOT NULL,
+  phone TEXT,
+  position TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  UNIQUE(user_id)
 );
 
-create table if not exists public.voters (
-  id uuid primary key default uuid_generate_v4(),
-  sumaaru text not null,
-  name text not null,
-  address text,
-  phone text,
-  sex text,
-  nid text,
-  present_location text,
-  registered_box text,
-  job_in text,
-  job_by text,
-  created_by uuid references public.users (id),
-  updated_by uuid references public.users (id),
-  created_at timestamptz not null default now(),
-  updated_at timestamptz not null default now()
+-- Voters table
+CREATE TABLE public.voters (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  sumaaru TEXT NOT NULL, -- Official voter list order number from Elections Commission
+  name TEXT NOT NULL,
+  address TEXT,
+  phone TEXT,
+  sex TEXT,
+  nid TEXT, -- National ID
+  present_location TEXT,
+  registered_box TEXT,
+  job_in TEXT,
+  job_by TEXT,
+  created_by UUID REFERENCES public.users(id) ON DELETE SET NULL,
+  updated_by UUID REFERENCES public.users(id) ON DELETE SET NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-create table if not exists public.voter_assignments (
-  candidate_id uuid references public.candidates (id) on delete cascade,
-  voter_id uuid references public.voters (id) on delete cascade,
-  created_at timestamptz not null default now(),
-  primary key (candidate_id, voter_id)
+-- Activity log table
+CREATE TABLE public.activity_log (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  user_id UUID NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
+  action TEXT NOT NULL,
+  timestamp TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  metadata JSONB DEFAULT '{}'::jsonb
 );
 
-create table if not exists public.candidate_permissions (
-  id uuid primary key default uuid_generate_v4(),
-  candidate_id uuid references public.candidates (id) on delete cascade,
-  field text not null,
-  can_edit boolean not null default true,
-  created_at timestamptz not null default now()
+-- Candidate permissions table (for field-level access control)
+CREATE TABLE public.candidate_permissions (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  candidate_id UUID NOT NULL REFERENCES public.candidates(id) ON DELETE CASCADE,
+  allowed_fields TEXT[] NOT NULL DEFAULT '{}', -- Array of field names candidate can edit
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  UNIQUE(candidate_id)
 );
 
-create table if not exists public.activity_log (
-  id uuid primary key default uuid_generate_v4(),
-  user_id uuid references public.users (id) on delete set null,
-  action text not null,
-  timestamp timestamptz not null default now(),
-  metadata jsonb not null default '{}'::jsonb
+-- Voter assignments table (assigns voters to candidates)
+CREATE TABLE public.voter_assignments (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  voter_id UUID NOT NULL REFERENCES public.voters(id) ON DELETE CASCADE,
+  candidate_id UUID NOT NULL REFERENCES public.candidates(id) ON DELETE CASCADE,
+  assigned_by UUID REFERENCES public.users(id) ON DELETE SET NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  UNIQUE(voter_id, candidate_id)
 );
 
-create table if not exists public.audit_log (
-  id uuid primary key default uuid_generate_v4(),
-  table_name text not null,
-  record_id uuid,
-  action text not null,
-  changed_by uuid,
-  changed_at timestamptz not null default now(),
-  before_data jsonb,
-  after_data jsonb
-);
+-- Indexes for performance
+CREATE INDEX idx_voters_sumaaru ON public.voters(sumaaru);
+CREATE INDEX idx_voters_created_by ON public.voters(created_by);
+CREATE INDEX idx_voters_updated_by ON public.voters(updated_by);
+CREATE INDEX idx_activity_log_user_id ON public.activity_log(user_id);
+CREATE INDEX idx_activity_log_timestamp ON public.activity_log(timestamp DESC);
+CREATE INDEX idx_candidates_user_id ON public.candidates(user_id);
+CREATE INDEX idx_voter_assignments_voter_id ON public.voter_assignments(voter_id);
+CREATE INDEX idx_voter_assignments_candidate_id ON public.voter_assignments(candidate_id);
 
-create or replace function public.set_voter_audit_fields()
-returns trigger
-language plpgsql
-as $$
-begin
-  if tg_op = 'INSERT' then
-    new.created_by := auth.uid();
-    new.updated_by := auth.uid();
-    new.created_at := now();
-    new.updated_at := now();
-  else
-    new.updated_by := auth.uid();
-    new.updated_at := now();
-  end if;
-  return new;
-end;
-$$;
+-- Function to update updated_at timestamp
+CREATE OR REPLACE FUNCTION update_updated_at_column()
+RETURNS TRIGGER AS $$
+BEGIN
+  NEW.updated_at = NOW();
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
 
-create trigger voters_audit_fields
-before insert or update on public.voters
-for each row execute function public.set_voter_audit_fields();
+-- Trigger to auto-update updated_at on voters
+CREATE TRIGGER update_voters_updated_at
+  BEFORE UPDATE ON public.voters
+  FOR EACH ROW
+  EXECUTE FUNCTION update_updated_at_column();
 
-create or replace function public.audit_changes()
-returns trigger
-language plpgsql
-as $$
-begin
-  insert into public.audit_log (
-    table_name,
-    record_id,
-    action,
-    changed_by,
-    before_data,
-    after_data
-  )
-  values (
-    tg_table_name,
-    case when tg_op = 'DELETE' then old.id else new.id end,
-    tg_op,
-    auth.uid(),
-    case when tg_op in ('UPDATE', 'DELETE') then to_jsonb(old) else null end,
-    case when tg_op in ('INSERT', 'UPDATE') then to_jsonb(new) else null end
+-- Enable Row Level Security
+ALTER TABLE public.users ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.candidates ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.voters ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.activity_log ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.candidate_permissions ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.voter_assignments ENABLE ROW LEVEL SECURITY;
+
+-- RLS Policies for users table
+CREATE POLICY "Admins can view all users"
+  ON public.users FOR SELECT
+  USING (
+    EXISTS (
+      SELECT 1 FROM public.users
+      WHERE id = auth.uid() AND role = 'admin'
+    )
   );
-  return coalesce(new, old);
-end;
-$$;
 
-create trigger users_audit
-after insert or update or delete on public.users
-for each row execute function public.audit_changes();
+CREATE POLICY "Admins can insert users"
+  ON public.users FOR INSERT
+  WITH CHECK (
+    EXISTS (
+      SELECT 1 FROM public.users
+      WHERE id = auth.uid() AND role = 'admin'
+    )
+  );
 
-create trigger candidates_audit
-after insert or update or delete on public.candidates
-for each row execute function public.audit_changes();
+CREATE POLICY "Admins can update users"
+  ON public.users FOR UPDATE
+  USING (
+    EXISTS (
+      SELECT 1 FROM public.users
+      WHERE id = auth.uid() AND role = 'admin'
+    )
+  );
 
-create trigger voters_audit
-after insert or update or delete on public.voters
-for each row execute function public.audit_changes();
+CREATE POLICY "Admins can delete users"
+  ON public.users FOR DELETE
+  USING (
+    EXISTS (
+      SELECT 1 FROM public.users
+      WHERE id = auth.uid() AND role = 'admin'
+    )
+  );
 
-alter table public.users enable row level security;
-alter table public.candidates enable row level security;
-alter table public.voters enable row level security;
-alter table public.voter_assignments enable row level security;
-alter table public.candidate_permissions enable row level security;
-alter table public.activity_log enable row level security;
-alter table public.audit_log enable row level security;
+CREATE POLICY "Users can view their own record"
+  ON public.users FOR SELECT
+  USING (id = auth.uid());
 
-create policy "admins_full_access_users"
-on public.users
-for all
-using (exists (select 1 from public.users u where u.id = auth.uid() and u.role = 'admin'))
-with check (exists (select 1 from public.users u where u.id = auth.uid() and u.role = 'admin'));
+-- RLS Policies for candidates table
+CREATE POLICY "Admins have full access to candidates"
+  ON public.candidates FOR ALL
+  USING (
+    EXISTS (
+      SELECT 1 FROM public.users
+      WHERE id = auth.uid() AND role = 'admin'
+    )
+  );
 
-create policy "users_view_self"
-on public.users
-for select
-using (auth.uid() = id);
+CREATE POLICY "Candidates can view their own record"
+  ON public.candidates FOR SELECT
+  USING (
+    user_id = auth.uid() OR
+    EXISTS (
+      SELECT 1 FROM public.users
+      WHERE id = auth.uid() AND role = 'admin'
+    )
+  );
 
-create policy "admins_full_access_candidates"
-on public.candidates
-for all
-using (exists (select 1 from public.users u where u.id = auth.uid() and u.role = 'admin'))
-with check (exists (select 1 from public.users u where u.id = auth.uid() and u.role = 'admin'));
+-- RLS Policies for voters table
+CREATE POLICY "Admins have full access to voters"
+  ON public.voters FOR ALL
+  USING (
+    EXISTS (
+      SELECT 1 FROM public.users
+      WHERE id = auth.uid() AND role = 'admin'
+    )
+  );
 
-create policy "candidate_view_self"
-on public.candidates
-for select
-using (user_id = auth.uid());
+-- Function to get voters assigned to a candidate
+CREATE OR REPLACE FUNCTION get_candidate_voters(candidate_user_id UUID)
+RETURNS TABLE (
+  id UUID,
+  sumaaru TEXT,
+  name TEXT,
+  address TEXT,
+  phone TEXT,
+  sex TEXT,
+  nid TEXT,
+  present_location TEXT,
+  registered_box TEXT,
+  job_in TEXT,
+  job_by TEXT,
+  created_at TIMESTAMPTZ,
+  updated_at TIMESTAMPTZ
+) AS $$
+BEGIN
+  -- For now, candidates can see all voters they created
+  -- Admin can configure assignments via candidate_permissions if needed
+  RETURN QUERY
+  SELECT v.id, v.sumaaru, v.name, v.address, v.phone, v.sex, v.nid,
+         v.present_location, v.registered_box, v.job_in, v.job_by,
+         v.created_at, v.updated_at
+  FROM public.voters v
+  WHERE v.created_by = candidate_user_id;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
 
-create policy "admins_full_access_candidate_permissions"
-on public.candidate_permissions
-for all
-using (exists (select 1 from public.users u where u.id = auth.uid() and u.role = 'admin'))
-with check (exists (select 1 from public.users u where u.id = auth.uid() and u.role = 'admin'));
-
-create policy "candidate_view_permissions"
-on public.candidate_permissions
-for select
-using (
-  exists (
-    select 1
-    from public.candidates c
-    where c.id = candidate_id
-      and c.user_id = auth.uid()
-  )
-);
-
-create policy "admins_full_access_voters"
-on public.voters
-for all
-using (exists (select 1 from public.users u where u.id = auth.uid() and u.role = 'admin'))
-with check (exists (select 1 from public.users u where u.id = auth.uid() and u.role = 'admin'));
-
-create policy "candidate_read_assigned_voters"
-on public.voters
-for select
-using (
-  exists (
-    select 1
-    from public.voter_assignments va
-    join public.candidates c on c.id = va.candidate_id
-    where va.voter_id = id
-      and c.user_id = auth.uid()
-  )
-);
-
-create policy "admins_full_access_voter_assignments"
-on public.voter_assignments
-for all
-using (exists (select 1 from public.users u where u.id = auth.uid() and u.role = 'admin'))
-with check (exists (select 1 from public.users u where u.id = auth.uid() and u.role = 'admin'));
-
-create policy "candidate_view_assignments"
-on public.voter_assignments
-for select
-using (
-  exists (
-    select 1
-    from public.candidates c
-    where c.id = candidate_id
-      and c.user_id = auth.uid()
-  )
-);
-
-create policy "admins_full_access_activity_log"
-on public.activity_log
-for all
-using (exists (select 1 from public.users u where u.id = auth.uid() and u.role = 'admin'))
-with check (exists (select 1 from public.users u where u.id = auth.uid() and u.role = 'admin'));
-
-create policy "users_insert_own_activity"
-on public.activity_log
-for insert
-with check (user_id = auth.uid());
-
-create policy "candidate_view_own_activity"
-on public.activity_log
-for select
-using (user_id = auth.uid());
-
-create policy "admins_full_access_audit_log"
-on public.audit_log
-for all
-using (exists (select 1 from public.users u where u.id = auth.uid() and u.role = 'admin'))
-with check (exists (select 1 from public.users u where u.id = auth.uid() and u.role = 'admin'));
-
-create policy "allow_audit_insert"
-on public.audit_log
-for insert
-with check (auth.uid() is not null);
-
-create or replace function public.get_candidate_voters()
-returns table(voter jsonb)
-language sql
-security definer
-set search_path = public
-as $$
-  with candidate as (
-    select id
-    from public.candidates
-    where user_id = auth.uid()
-  ),
-  perms as (
-    select array_agg(field) as fields
-    from public.candidate_permissions cp
-    join candidate c on c.id = cp.candidate_id
-  )
-  select jsonb_object_agg(e.key, e.value) as voter
-  from public.voters v
-  join public.voter_assignments va on va.voter_id = v.id
-  join candidate c on c.id = va.candidate_id
-  cross join perms p
-  cross join lateral jsonb_each(to_jsonb(v)) e
-  where e.key = any(p.fields) or e.key in ('id', 'sumaaru', 'name')
-  group by v.id;
-$$;
-
-create or replace function public.update_candidate_voter(
-  p_voter_id uuid,
-  p_updates jsonb
+-- Function to update voter fields (with permission check)
+CREATE OR REPLACE FUNCTION update_candidate_voter(
+  voter_id UUID,
+  candidate_user_id UUID,
+  updates JSONB
 )
-returns void
-language plpgsql
-security definer
-set search_path = public
-as $$
-declare
-  allowed_fields text[];
-  kv record;
-  set_clause text := '';
-begin
-  select array_agg(field)
-  into allowed_fields
-  from public.candidate_permissions cp
-  join public.candidates c on c.id = cp.candidate_id
-  where c.user_id = auth.uid();
+RETURNS BOOLEAN AS $$
+DECLARE
+  perm_fields TEXT[];
+  update_fields JSONB := '{}'::jsonb;
+  key TEXT;
+BEGIN
+  -- Get allowed fields for this candidate
+  SELECT allowed_fields INTO perm_fields
+  FROM public.candidate_permissions cp
+  JOIN public.candidates c ON c.id = cp.candidate_id
+  WHERE c.user_id = candidate_user_id;
 
-  if allowed_fields is null then
-    raise exception 'No permissions found';
-  end if;
+  -- If no permissions set, allow all fields (admin can restrict later)
+  IF perm_fields IS NULL OR array_length(perm_fields, 1) IS NULL THEN
+    -- Allow update if candidate created this voter
+    IF EXISTS (
+      SELECT 1 FROM public.voters
+      WHERE id = voter_id AND created_by = candidate_user_id
+    ) THEN
+      UPDATE public.voters
+      SET
+        name = COALESCE((updates->>'name')::TEXT, name),
+        address = COALESCE((updates->>'address')::TEXT, address),
+        phone = COALESCE((updates->>'phone')::TEXT, phone),
+        present_location = COALESCE((updates->>'present_location')::TEXT, present_location),
+        updated_by = candidate_user_id
+      WHERE id = voter_id;
+      RETURN TRUE;
+    END IF;
+    RETURN FALSE;
+  END IF;
 
-  if not exists (
-    select 1
-    from public.voter_assignments va
-    join public.candidates c on c.id = va.candidate_id
-    where va.voter_id = p_voter_id
-      and c.user_id = auth.uid()
-  ) then
-    raise exception 'Not authorized to update this voter';
-  end if;
+  -- Filter updates to only allowed fields
+  FOR key IN SELECT jsonb_object_keys(updates) LOOP
+    IF key = ANY(perm_fields) THEN
+      update_fields := update_fields || jsonb_build_object(key, updates->key);
+    END IF;
+  END LOOP;
 
-  for kv in select * from jsonb_each_text(p_updates)
-  loop
-    if kv.key = any(allowed_fields) then
-      set_clause := set_clause || format('%I = %L,', kv.key, kv.value);
-    end if;
-  end loop;
+  -- Apply filtered updates
+  IF jsonb_object_keys(update_fields) IS NOT NULL THEN
+    UPDATE public.voters
+    SET
+      name = COALESCE((update_fields->>'name')::TEXT, name),
+      address = COALESCE((update_fields->>'address')::TEXT, address),
+      phone = COALESCE((update_fields->>'phone')::TEXT, phone),
+      present_location = COALESCE((update_fields->>'present_location')::TEXT, present_location),
+      updated_by = candidate_user_id
+    WHERE id = voter_id AND created_by = candidate_user_id;
+    RETURN TRUE;
+  END IF;
 
-  if set_clause = '' then
-    raise exception 'No permitted fields supplied';
-  end if;
+  RETURN FALSE;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
 
-  set_clause := set_clause || format('updated_by = %L, updated_at = now()', auth.uid());
+-- RLS Policy: Candidates can view voters via function
+CREATE POLICY "Candidates can view assigned voters via function"
+  ON public.voters FOR SELECT
+  USING (
+    EXISTS (
+      SELECT 1 FROM public.users
+      WHERE id = auth.uid() AND role = 'candidate'
+    ) AND created_by = auth.uid()
+  );
 
-  execute format('update public.voters set %s where id = %L', set_clause, p_voter
+-- RLS Policies for activity_log table
+CREATE POLICY "Admins can view all activity logs"
+  ON public.activity_log FOR SELECT
+  USING (
+    EXISTS (
+      SELECT 1 FROM public.users
+      WHERE id = auth.uid() AND role = 'admin'
+    )
+  );
+
+CREATE POLICY "Users can view their own activity logs"
+  ON public.activity_log FOR SELECT
+  USING (user_id = auth.uid());
+
+CREATE POLICY "System can insert activity logs"
+  ON public.activity_log FOR INSERT
+  WITH CHECK (true);
+
+-- RLS Policies for candidate_permissions table
+CREATE POLICY "Admins have full access to candidate_permissions"
+  ON public.candidate_permissions FOR ALL
+  USING (
+    EXISTS (
+      SELECT 1 FROM public.users
+      WHERE id = auth.uid() AND role = 'admin'
+    )
+  );
+
+-- RLS Policies for voter_assignments table
+CREATE POLICY "Admins have full access to voter_assignments"
+  ON public.voter_assignments FOR ALL
+  USING (
+    EXISTS (
+      SELECT 1 FROM public.users
+      WHERE id = auth.uid() AND role = 'admin'
+    )
+  );
+
+CREATE POLICY "Candidates can view their own assignments"
+  ON public.voter_assignments FOR SELECT
+  USING (
+    EXISTS (
+      SELECT 1 FROM public.candidates c
+      WHERE c.id = voter_assignments.candidate_id
+      AND c.user_id = auth.uid()
+    )
+  );
+
+-- Grant necessary permissions
+GRANT USAGE ON SCHEMA public TO authenticated;
+GRANT ALL ON ALL TABLES IN SCHEMA public TO authenticated;
+GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA public TO authenticated;

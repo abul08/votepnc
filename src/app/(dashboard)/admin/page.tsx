@@ -1,10 +1,24 @@
-import { Card, CardContent, CardHeader } from "@/components/ui/card";
-import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Skeleton } from "@/components/ui/skeleton";
+import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { requireRole } from "@/lib/auth";
+import { Suspense } from "react";
 
-export default async function AdminDashboard() {
-  await requireRole("admin");
-  const supabase = createSupabaseServerClient();
+function StatCardSkeleton() {
+  return (
+    <Card>
+      <CardHeader className="pb-2">
+        <Skeleton className="h-4 w-24" />
+      </CardHeader>
+      <CardContent>
+        <Skeleton className="h-8 w-16" />
+      </CardContent>
+    </Card>
+  );
+}
+
+async function DashboardStats() {
+  const supabase = createSupabaseAdminClient();
 
   const [
     { count: voterCount },
@@ -51,74 +65,117 @@ export default async function AdminDashboard() {
   );
 
   return (
-    <div className="space-y-6">
-      <div className="grid gap-4 md:grid-cols-3">
+    <>
+      <div className="grid gap-3 sm:gap-4 grid-cols-2 lg:grid-cols-3">
         <Card>
-          <CardHeader>
-            <p className="text-xs uppercase text-slate-500">Total voters</p>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-xs sm:text-sm font-medium text-muted-foreground">
+              Total Voters
+            </CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-2xl font-semibold">{voterCount ?? 0}</p>
+            <p className="text-2xl sm:text-3xl font-bold">{voterCount ?? 0}</p>
           </CardContent>
         </Card>
+        
         <Card>
-          <CardHeader>
-            <p className="text-xs uppercase text-slate-500">Active candidates</p>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-xs sm:text-sm font-medium text-muted-foreground">
+              Candidates
+            </CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-2xl font-semibold">{candidateCount ?? 0}</p>
+            <p className="text-2xl sm:text-3xl font-bold">{candidateCount ?? 0}</p>
           </CardContent>
         </Card>
-        <Card>
-          <CardHeader>
-            <p className="text-xs uppercase text-slate-500">Recent logins</p>
-          </CardHeader>
-          <CardContent>
-            <ul className="space-y-2 text-sm text-slate-600">
-              {(activity ?? []).map((item) => (
-                <li key={item.id}>
-                  {item.action} ·{" "}
-                  {new Date(item.timestamp).toLocaleString("en-GB")}
-                </li>
-              ))}
-            </ul>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader>
-            <p className="text-xs uppercase text-slate-500">
-              Voters added by candidates
-            </p>
-          </CardHeader>
-          <CardContent>
-            <ul className="space-y-2 text-sm text-slate-600">
-              {topCreatorIds.length === 0 && <li>No data yet.</li>}
-              {topCreatorIds.map((id) => (
-                <li key={id}>
-                  {creatorMap.get(id) ?? id} · {counts.get(id) ?? 0}
-                </li>
-              ))}
-            </ul>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader>
-            <p className="text-xs uppercase text-slate-500">Last CSV import</p>
+
+        <Card className="col-span-2 lg:col-span-1">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-xs sm:text-sm font-medium text-muted-foreground">
+              Last Import
+            </CardTitle>
           </CardHeader>
           <CardContent>
             {lastCsv ? (
-              <div className="space-y-1 text-sm text-slate-600">
-                <p>
+              <div className="space-y-1">
+                <p className="text-lg sm:text-xl font-semibold">
+                  {(lastCsv.metadata as { inserted?: number })?.inserted ?? 0} records
+                </p>
+                <p className="text-xs text-muted-foreground">
                   {new Date(lastCsv.timestamp).toLocaleString("en-GB")}
                 </p>
-                <p>Inserted: {lastCsv.metadata?.inserted ?? 0}</p>
               </div>
             ) : (
-              <p className="text-sm text-slate-600">No imports yet.</p>
+              <p className="text-muted-foreground text-sm">No imports</p>
             )}
           </CardContent>
         </Card>
       </div>
+
+      <div className="grid gap-3 sm:gap-4 md:grid-cols-2">
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base sm:text-lg">Recent Activity</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <ul className="space-y-2 sm:space-y-3">
+              {(activity ?? []).length === 0 && (
+                <li className="text-muted-foreground text-sm">No recent activity.</li>
+              )}
+              {(activity ?? []).map((item) => (
+                <li key={item.id} className="flex items-center justify-between text-sm gap-2">
+                  <span className="font-medium capitalize truncate">{item.action.replace("_", " ")}</span>
+                  <span className="text-muted-foreground text-xs whitespace-nowrap">
+                    {new Date(item.timestamp).toLocaleString("en-GB")}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base sm:text-lg">Top Creators</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <ul className="space-y-2 sm:space-y-3">
+              {topCreatorIds.length === 0 && (
+                <li className="text-muted-foreground text-sm">No data yet.</li>
+              )}
+              {topCreatorIds.map((id) => (
+                <li key={id} className="flex items-center justify-between text-sm gap-2">
+                  <span className="font-medium truncate">{creatorMap.get(id) ?? id.slice(0, 8)}</span>
+                  <span className="text-muted-foreground whitespace-nowrap">{counts.get(id) ?? 0} voters</span>
+                </li>
+              ))}
+            </ul>
+          </CardContent>
+        </Card>
+      </div>
+    </>
+  );
+}
+
+export default async function AdminDashboard() {
+  await requireRole("admin");
+
+  return (
+    <div className="space-y-4 sm:space-y-6">
+      <div>
+        <h1 className="text-xl sm:text-2xl font-bold tracking-tight">Dashboard</h1>
+        <p className="text-sm text-muted-foreground">Overview of the voter database.</p>
+      </div>
+
+      <Suspense fallback={
+        <div className="grid gap-3 sm:gap-4 grid-cols-2 lg:grid-cols-3">
+          <StatCardSkeleton />
+          <StatCardSkeleton />
+          <StatCardSkeleton />
+        </div>
+      }>
+        <DashboardStats />
+      </Suspense>
     </div>
   );
 }

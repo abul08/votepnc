@@ -2,8 +2,8 @@
 
 import Papa from "papaparse";
 
-import { createSupabaseServerClient } from "@/lib/supabase/server";
-import { requireRole } from "@/lib/auth";
+import { createSupabaseAdminClient } from "@/lib/supabase/admin";
+import { requireRole, getSessionUser } from "@/lib/auth";
 
 type ImportState = {
   success?: boolean;
@@ -47,18 +47,19 @@ export async function importVotersAction(
     job_by: row.job_by ?? row["job by"] ?? "",
   }));
 
-  const supabase = createSupabaseServerClient();
-  const { error } = await supabase.from("voters").insert(rows);
+  const adminClient = createSupabaseAdminClient();
+  const user = await getSessionUser();
+  
+  const { error } = await adminClient.from("voters").insert(
+    rows.map(row => ({ ...row, created_by: user?.id }))
+  );
 
   if (error) {
     return { success: false, message: error.message };
   }
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
   if (user) {
-    await supabase.from("activity_log").insert({
+    await adminClient.from("activity_log").insert({
       user_id: user.id,
       action: "csv_import",
       metadata: { inserted: rows.length },

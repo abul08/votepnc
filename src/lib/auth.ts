@@ -1,9 +1,10 @@
 import { redirect } from "next/navigation";
 
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 
 export async function getSessionUser() {
-  const supabase = createSupabaseServerClient();
+  const supabase = await createSupabaseServerClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
@@ -12,7 +13,7 @@ export async function getSessionUser() {
 }
 
 export async function getUserRole() {
-  const supabase = createSupabaseServerClient();
+  const supabase = await createSupabaseServerClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
@@ -21,13 +22,26 @@ export async function getUserRole() {
     return null;
   }
 
-  const { data } = await supabase
-    .from("users")
-    .select("role")
-    .eq("id", user.id)
-    .maybeSingle();
+  // Use admin client to bypass RLS
+  try {
+    const adminClient = createSupabaseAdminClient();
+    const { data } = await adminClient
+      .from("users")
+      .select("role")
+      .eq("id", user.id)
+      .maybeSingle();
 
-  return data?.role ?? null;
+    return data?.role ?? null;
+  } catch {
+    // Fallback to regular client if admin client fails
+    const { data } = await supabase
+      .from("users")
+      .select("role")
+      .eq("id", user.id)
+      .maybeSingle();
+
+    return data?.role ?? null;
+  }
 }
 
 export async function requireUser() {

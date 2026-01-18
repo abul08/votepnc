@@ -4,21 +4,34 @@ Secure, mobile-first voter database for Maldivian local council campaigns. Built
 
 ## Setup
 
-1. Create a Supabase project and set the following environment variables:
-   - `NEXT_PUBLIC_SUPABASE_URL`
-   - `NEXT_PUBLIC_SUPABASE_ANON_KEY`
-   - `SUPABASE_SERVICE_ROLE_KEY`
+**📖 For detailed setup instructions, see [SETUP.md](./SETUP.md)**
 
-2. Run the SQL migration in `supabase/migrations/001_init.sql` from the Supabase SQL editor.
+### Quick Start
 
-3. Install dependencies and start the dev server:
+1. **Install dependencies:**
+   ```bash
+   npm install
+   ```
 
-```bash
-npm install
-npm run dev
-```
+2. **Configure environment variables:**
+   
+   Edit `.env.local` and replace the placeholder values with your actual Supabase credentials:
+   - Get your credentials from: https://supabase.com/dashboard/project/_/settings/api
+   - **Important:** Replace ALL placeholder values (`your-project-url-here`, `your-anon-key-here`, etc.)
+   - Make sure your URL starts with `https://` (e.g., `https://xxxxx.supabase.co`)
 
-Open `http://localhost:3000` to access the app.
+3. **Set up the database:**
+   
+   Run `supabase/migrations/001_init.sql` in your Supabase SQL Editor
+
+4. **Create your first admin user** (see SETUP.md for details)
+
+5. **Start the dev server:**
+   ```bash
+   npm run dev
+   ```
+
+**⚠️ Common Error:** If you see "Please replace the placeholder values", make sure you've updated `.env.local` with your actual Supabase credentials and restarted the dev server.
 
 ## Features
 
