@@ -39,3 +39,6 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+
+D:\abuL\web-dev\lcewdc2026\supabase\migrations\*.sql
