@@ -24,7 +24,6 @@ async function DashboardStats() {
     { count: voterCount },
     { count: candidateCount },
     { data: activity },
-    { data: voterCreators },
     { data: lastCsv },
   ] = await Promise.all([
     supabase.from("voters").select("id", { count: "exact", head: true }),
@@ -34,7 +33,6 @@ async function DashboardStats() {
       .select("id, action, timestamp")
       .order("timestamp", { ascending: false })
       .limit(5),
-    supabase.from("voters").select("created_by").limit(500),
     supabase
       .from("activity_log")
       .select("id, timestamp, metadata")
@@ -43,26 +41,6 @@ async function DashboardStats() {
       .limit(1)
       .maybeSingle(),
   ]);
-
-  const counts = new Map<string, number>();
-  (voterCreators ?? []).forEach((row) => {
-    if (!row.created_by) return;
-    counts.set(row.created_by, (counts.get(row.created_by) ?? 0) + 1);
-  });
-
-  const topCreatorIds = Array.from(counts.entries())
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, 5)
-    .map(([id]) => id);
-
-  const { data: creatorUsers } = await supabase
-    .from("users")
-    .select("id, username")
-    .in("id", topCreatorIds);
-
-  const creatorMap = new Map(
-    (creatorUsers ?? []).map((user) => [user.id, user.username]),
-  );
 
   return (
     <>
