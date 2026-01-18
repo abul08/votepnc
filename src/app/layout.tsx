@@ -14,8 +14,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Maldives Voter DB",
-  description: "Secure voter database for local council campaigns.",
+  title: "VOTE PNC",
+  description: "Voter database for local council campaigns.",
 };
 
 export const viewport: Viewport = {
