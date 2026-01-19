@@ -2,7 +2,10 @@ import { NextResponse } from "next/server";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 
-export async function GET() {
+export async function PUT(
+  request: Request,
+  { params }: { params: Promise<{ id: string }> }
+) {
   try {
     const supabase = await createSupabaseServerClient();
     const { data: { user } } = await supabase.auth.getUser();
@@ -27,7 +30,7 @@ export async function GET() {
     // Get candidate info
     const { data: candidate } = await adminClient
       .from("candidates")
-      .select("id, name, candidate_number, position")
+      .select("id")
       .eq("user_id", user.id)
       .maybeSingle();
 
@@ -35,39 +38,39 @@ export async function GET() {
       return NextResponse.json({ error: "Candidate not found" }, { status: 404 });
     }
 
-    // Get all voters with only the needed fields
-    const { data: voters } = await adminClient
-      .from("voters")
-      .select("id, name, nid, phone, present_location")
-      .order("name", { ascending: true });
+    const { id: voterId } = await params;
+    const body = await request.json();
+    const { will_vote } = body;
 
-    // Get voting preferences for this candidate
-    const { data: preferences } = await adminClient
+    if (typeof will_vote !== "boolean") {
+      return NextResponse.json(
+        { error: "will_vote must be a boolean" },
+        { status: 400 }
+      );
+    }
+
+    // Upsert voting preference
+    const { error } = await adminClient
       .from("voter_voting_preferences")
-      .select("voter_id, will_vote")
-      .eq("candidate_id", candidate.id);
+      .upsert(
+        {
+          candidate_id: candidate.id,
+          voter_id: voterId,
+          will_vote,
+        },
+        {
+          onConflict: "candidate_id,voter_id",
+        }
+      );
 
-    // Create a map of voter_id -> will_vote
-    const preferencesMap = new Map<string, boolean>();
-    preferences?.forEach((pref) => {
-      preferencesMap.set(pref.voter_id, pref.will_vote);
-    });
+    if (error) {
+      return NextResponse.json(
+        { error: error.message },
+        { status: 500 }
+      );
+    }
 
-    // Merge voters with their voting preferences
-    const votersWithPreferences = voters?.map((voter) => ({
-      ...voter,
-      will_vote: preferencesMap.get(voter.id) ?? false,
-    })) ?? [];
-
-    return NextResponse.json({
-      voters: votersWithPreferences,
-      candidate: {
-        id: candidate.id,
-        name: candidate.name,
-        candidate_number: candidate.candidate_number,
-        position: candidate.position,
-      },
-    });
+    return NextResponse.json({ success: true });
   } catch (error) {
     return NextResponse.json(
       { error: error instanceof Error ? error.message : "Internal error" },

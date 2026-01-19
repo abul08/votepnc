@@ -31,7 +31,7 @@ export default async function DashboardLayout({
         <div className="flex h-14 items-center justify-between px-4 sm:px-6">
           <div className="flex items-center gap-2 sm:gap-4">
             <Link href={role === "admin" ? "/admin" : "/candidate"} className="flex items-center gap-2">
-              <span className="font-bold text-sm sm:text-base truncate">Voter DB</span>
+              <span className="font-bold text-sm sm:text-base truncate">PNC Voter DB</span>
             </Link>
             <span className="hidden sm:inline-flex rounded-full bg-secondary px-2.5 py-0.5 text-xs font-medium capitalize text-secondary-foreground">
               {role}

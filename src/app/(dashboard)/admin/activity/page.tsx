@@ -92,7 +92,7 @@ export default async function ActivityPage() {
                   <div className="text-xs text-muted-foreground space-y-1">
                     <p>User: {user?.username ?? "Unknown"}</p>
                     <p>IP: {device.ip_address ?? "Unknown"}</p>
-                    <p>Logged in: {new Date(device.created_at).toLocaleString("en-GB")}</p>
+                    <p>Logged in: {new Date(device.created_at).toLocaleString(undefined, { dateStyle: "short", timeStyle: "short" })}</p>
                   </div>
                 </div>
               );
@@ -136,7 +136,7 @@ export default async function ActivityPage() {
                         {device.ip_address ?? "Unknown"}
                       </TableCell>
                       <TableCell className="whitespace-nowrap text-sm">
-                        {new Date(device.created_at).toLocaleString("en-GB")}
+                        {new Date(device.created_at).toLocaleString(undefined, { dateStyle: "short", timeStyle: "short" })}
                       </TableCell>
                     </TableRow>
                   );
@@ -166,7 +166,7 @@ export default async function ActivityPage() {
                       {log.action.replace(/_/g, " ")}
                     </Badge>
                     <span className="text-xs text-muted-foreground">
-                      {new Date(log.timestamp).toLocaleString("en-GB")}
+                      {new Date(log.timestamp).toLocaleString(undefined, { dateStyle: "short", timeStyle: "short" })}
                     </span>
                   </div>
                   <div className="flex items-center gap-2">
@@ -210,7 +210,7 @@ export default async function ActivityPage() {
                   return (
                     <TableRow key={log.id}>
                       <TableCell className="whitespace-nowrap text-sm">
-                        {new Date(log.timestamp).toLocaleString("en-GB")}
+                        {new Date(log.timestamp).toLocaleString(undefined, { dateStyle: "short", timeStyle: "short" })}
                       </TableCell>
                       <TableCell className="font-medium">
                         {user?.username ?? "Unknown"}

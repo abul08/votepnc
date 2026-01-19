@@ -80,7 +80,7 @@ async function DashboardStats() {
                   {(lastCsv.metadata as { inserted?: number })?.inserted ?? 0} records
                 </p>
                 <p className="text-xs text-muted-foreground">
-                  {new Date(lastCsv.timestamp).toLocaleString("en-GB")}
+                  {new Date(lastCsv.timestamp).toLocaleString(undefined, { dateStyle: "short", timeStyle: "short" })}
                 </p>
               </div>
             ) : (
@@ -104,7 +104,7 @@ async function DashboardStats() {
                 <li key={item.id} className="flex items-center justify-between text-sm gap-2">
                   <span className="font-medium capitalize truncate">{item.action.replace("_", " ")}</span>
                   <span className="text-muted-foreground text-xs whitespace-nowrap">
-                    {new Date(item.timestamp).toLocaleString("en-GB")}
+                    {new Date(item.timestamp).toLocaleString(undefined, { dateStyle: "short", timeStyle: "short" })}
                   </span>
                 </li>
               ))}

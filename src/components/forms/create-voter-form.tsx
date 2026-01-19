@@ -69,7 +69,7 @@ export function CreateVoterForm({ action }: CreateVoterFormProps) {
             disabled={isLoading}
             className="h-11 sm:h-9 rounded-md border border-input bg-background px-3 text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-ring disabled:opacity-50"
           >
-            <option value="">Sex</option>
+            <option value="">Gender</option>
             <option value="M">M</option>
             <option value="F">F</option>
           </select>

@@ -1,20 +1,13 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useState, useTransition, useEffect } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
 import { Spinner } from "@/components/ui/spinner";
 import { DeleteButton } from "@/components/forms/delete-button";
+import { Badge } from "@/components/ui/badge";
 
 interface Voter {
   id: string;
@@ -28,6 +21,19 @@ interface Voter {
   registered_box: string | null;
   job_in: string | null;
   job_by: string | null;
+}
+
+interface Candidate {
+  id: string;
+  name: string;
+  candidate_number: string | null;
+  position: string | null;
+}
+
+interface VotingPreference {
+  candidate_id: string;
+  voter_id: string;
+  will_vote: boolean;
 }
 
 interface VotersListProps {
@@ -44,8 +50,31 @@ export function VotersList({
   updateAction,
 }: VotersListProps) {
   const [voters, setVoters] = useState(initialVoters);
+  const [candidates, setCandidates] = useState<Candidate[]>([]);
+  const [preferences, setPreferences] = useState<VotingPreference[]>([]);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
+
+  useEffect(() => {
+    async function fetchVotingData() {
+      try {
+        const res = await fetch("/api/admin/voters");
+        const data = await res.json();
+        setCandidates(data.candidates ?? []);
+        setPreferences(data.preferences ?? []);
+      } catch {
+        toast.error("Failed to load voting preferences");
+      }
+    }
+    fetchVotingData();
+  }, []);
+
+  function getVoterPreference(voterId: string, candidateId: string): boolean | null {
+    const pref = preferences.find(
+      (p) => p.voter_id === voterId && p.candidate_id === candidateId
+    );
+    return pref ? pref.will_vote : null;
+  }
 
   async function handleUpdate(voterId: string, formData: FormData) {
     formData.append("voterId", voterId);
@@ -83,7 +112,7 @@ export function VotersList({
     <Card>
       <CardHeader className="pb-3 sm:pb-6">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <CardTitle className="text-base sm:text-lg">Voter List</CardTitle>
+          <CardTitle className="text-base sm:text-lg">Voter List ({voters.length})</CardTitle>
           <form className="flex gap-2" method="get">
             <Input
               name="search"
@@ -149,7 +178,7 @@ export function VotersList({
                     />
                   </div>
                   <div className="space-y-1.5">
-                    <label className="text-sm font-medium">Sex</label>
+                    <label className="text-sm font-medium">Gender</label>
                     <select
                       name="sex"
                       defaultValue={editingVoter.sex ?? ""}
@@ -225,81 +254,118 @@ export function VotersList({
           </div>
         )}
 
-        {/* Mobile Card View */}
-        <div className="block sm:hidden space-y-3 px-4">
+        {/* Card View */}
+        <div className="space-y-4 px-4 pb-4">
           {voters.length === 0 && (
-            <p className="text-center text-muted-foreground py-4">No voters found.</p>
+            <p className="text-center text-muted-foreground py-8">No voters found.</p>
           )}
-          {voters.map((voter) => (
-            <div key={voter.id} className="p-3 rounded-lg border space-y-2">
-              <div className="flex items-start justify-between">
-                <div className="space-y-1 min-w-0 flex-1">
-                  <p className="font-medium">{voter.name}</p>
-                  <p className="text-xs text-muted-foreground">Sumaaru: {voter.sumaaru}</p>
-                </div>
-                <div className="flex gap-1">
-                  <Button 
-                    variant="ghost" 
-                    size="sm" 
-                    onClick={() => setEditingId(voter.id)}
-                  >
-                    Edit
-                  </Button>
-                  <DeleteButton action={deleteAction} itemId={voter.id} itemName="voter" inputName="voterId" />
-                </div>
-              </div>
-              {voter.phone && (
-                <p className="text-sm text-muted-foreground">📞 {voter.phone}</p>
-              )}
-              {voter.address && (
-                <p className="text-sm text-muted-foreground truncate">📍 {voter.address}</p>
-              )}
-            </div>
-          ))}
-        </div>
+          {voters.map((voter) => {
+            const voterPreferences = candidates
+              .map((candidate) => ({
+                candidate,
+                willVote: getVoterPreference(voter.id, candidate.id),
+              }))
+              .filter(({ willVote }) => willVote === true);
 
-        {/* Desktop Table View */}
-        <div className="hidden sm:block">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Sumaaru</TableHead>
-                <TableHead>Name</TableHead>
-                <TableHead>Phone</TableHead>
-                <TableHead>Address</TableHead>
-                <TableHead className="w-[120px]"></TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {voters.length === 0 && (
-                <TableRow>
-                  <TableCell colSpan={5} className="text-center text-muted-foreground">
-                    No voters found.
-                  </TableCell>
-                </TableRow>
-              )}
-              {voters.map((voter) => (
-                <TableRow key={voter.id}>
-                  <TableCell className="font-medium font-mono text-xs">{voter.sumaaru}</TableCell>
-                  <TableCell>{voter.name}</TableCell>
-                  <TableCell className="text-muted-foreground">{voter.phone || "—"}</TableCell>
-                  <TableCell className="max-w-[200px] truncate text-muted-foreground">{voter.address || "—"}</TableCell>
-                  <TableCell>
-                    <div className="flex gap-1">
-                      <Button 
-                        variant="ghost" 
-                        size="sm"
-                        onClick={() => setEditingId(voter.id)}
-                      >
-                        Edit
-                      </Button>
-                      <DeleteButton action={deleteAction} itemId={voter.id} itemName="voter" inputName="voterId" />
+            return (
+              <Card key={voter.id} className="border">
+                <CardContent className="p-4 sm:p-6">
+                  <div className="space-y-4">
+                    {/* Header with name and actions */}
+                    <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
+                      <div className="flex-1">
+                        <h3 className="text-lg font-semibold">{voter.name}</h3>
+                        <p className="text-sm text-muted-foreground font-mono">
+                          Sumaaru: {voter.sumaaru}
+                        </p>
+                      </div>
+                      <div className="flex gap-2">
+                        <Button 
+                          variant="outline" 
+                          size="sm" 
+                          onClick={() => setEditingId(voter.id)}
+                        >
+                          Edit
+                        </Button>
+                        <DeleteButton action={deleteAction} itemId={voter.id} itemName="voter" inputName="voterId" />
+                      </div>
                     </div>
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+
+                    {/* Voter Information Grid */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 text-sm">
+                      {voter.nid && (
+                        <div>
+                          <span className="text-muted-foreground">NID:</span>{" "}
+                          <span className="font-mono">{voter.nid}</span>
+                        </div>
+                      )}
+                      {voter.phone && (
+                        <div>
+                          <span className="text-muted-foreground">Phone:</span>{" "}
+                          <span className="font-mono">{voter.phone}</span>
+                        </div>
+                      )}
+                      {voter.sex && (
+                        <div>
+                          <span className="text-muted-foreground">Gender:</span>{" "}
+                          <span>{voter.sex}</span>
+                        </div>
+                      )}
+                      {voter.address && (
+                        <div className="sm:col-span-2 lg:col-span-1">
+                          <span className="text-muted-foreground">Address:</span>{" "}
+                          <span>{voter.address}</span>
+                        </div>
+                      )}
+                      {voter.present_location && (
+                        <div className="sm:col-span-2 lg:col-span-1">
+                          <span className="text-muted-foreground">Present Location:</span>{" "}
+                          <span>{voter.present_location}</span>
+                        </div>
+                      )}
+                      {voter.registered_box && (
+                        <div>
+                          <span className="text-muted-foreground">Registered Box:</span>{" "}
+                          <Badge variant="outline">{voter.registered_box}</Badge>
+                        </div>
+                      )}
+                      {voter.job_in && (
+                        <div>
+                          <span className="text-muted-foreground">Job In:</span>{" "}
+                          <span>{voter.job_in}</span>
+                        </div>
+                      )}
+                      {voter.job_by && (
+                        <div>
+                          <span className="text-muted-foreground">Job By:</span>{" "}
+                          <span>{voter.job_by}</span>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Candidate Voting Preferences */}
+                    {voterPreferences.length > 0 && (
+                      <div className="border-t pt-4 mt-4">
+                        <h4 className="text-sm font-semibold mb-3 text-muted-foreground">
+                          Candidates Preference
+                        </h4>
+                        <div className="flex flex-wrap gap-2">
+                          {voterPreferences.map(({ candidate }) => (
+                            <span
+                              key={candidate.id}
+                              className="text-sm font-medium px-3 py-1 rounded-md bg-primary/10 text-primary border border-primary/20"
+                            >
+                              {candidate.name}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+            );
+          })}
         </div>
       </CardContent>
     </Card>

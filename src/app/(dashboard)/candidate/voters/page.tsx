@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Table,
   TableBody,
@@ -17,11 +18,14 @@ import {
 interface Voter {
   id: string;
   name: string;
+  nid: string | null;
   phone: string | null;
   present_location: string | null;
+  will_vote: boolean;
 }
 
 interface CandidateInfo {
+  id: string;
   name: string;
   candidate_number: string | null;
   position: string | null;
@@ -68,6 +72,7 @@ export default function CandidateVotersPage() {
   const [candidateInfo, setCandidateInfo] = useState<CandidateInfo | null>(null);
   const [search, setSearch] = useState("");
   const [isLoading, setIsLoading] = useState(true);
+  const [updatingVoters, setUpdatingVoters] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     fetchData();
@@ -82,6 +87,7 @@ export default function CandidateVotersPage() {
         voters.filter(
           (v) =>
             v.name.toLowerCase().includes(term) ||
+            v.nid?.toLowerCase().includes(term) ||
             v.phone?.toLowerCase().includes(term) ||
             v.present_location?.toLowerCase().includes(term)
         )
@@ -102,6 +108,49 @@ export default function CandidateVotersPage() {
       toast.error("Failed to load voters");
     } finally {
       setIsLoading(false);
+    }
+  }
+
+  async function handleToggleWillVote(voterId: string, currentValue: boolean) {
+    setUpdatingVoters((prev) => new Set(prev).add(voterId));
+    
+    try {
+      const res = await fetch(`/api/candidate/voters/${voterId}/will-vote`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ will_vote: !currentValue }),
+      });
+
+      if (!res.ok) {
+        const error = await res.json();
+        throw new Error(error.error || "Failed to update voting preference");
+      }
+
+      // Update local state
+      setVoters((prev) =>
+        prev.map((voter) =>
+          voter.id === voterId
+            ? { ...voter, will_vote: !currentValue }
+            : voter
+        )
+      );
+      setFilteredVoters((prev) =>
+        prev.map((voter) =>
+          voter.id === voterId
+            ? { ...voter, will_vote: !currentValue }
+            : voter
+        )
+      );
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : "Failed to update voting preference"
+      );
+    } finally {
+      setUpdatingVoters((prev) => {
+        const next = new Set(prev);
+        next.delete(voterId);
+        return next;
+      });
     }
   }
 
@@ -152,13 +201,13 @@ export default function CandidateVotersPage() {
       )}
 
       <Card>
-        <CardHeader className="pb-3 sm:pb-6">
+        <CardHeader className="flex flex-col space-y-1.5 p-4 pb-3 w-full sm:pb-6">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <CardTitle className="text-base sm:text-lg">Voter List ({filteredVoters.length})</CardTitle>
-            <div className="flex gap-2">
-              <Input
-                placeholder="Search by name, phone, location..."
-                value={search}
+            <div className="flex gap-2 ">
+                <Input
+                placeholder="Search by name, NID, phone, location..."
+                value={search} 
                 onChange={(e) => setSearch(e.target.value)}
                 className="h-9 w-full sm:w-64"
               />
@@ -175,7 +224,19 @@ export default function CandidateVotersPage() {
             )}
             {filteredVoters.map((voter) => (
               <div key={voter.id} className="p-4 rounded-lg border space-y-2">
-                <p className="font-medium">{voter.name}</p>
+                <div className="flex items-start justify-between gap-2">
+                  <div className="flex-1">
+                    <p className="font-medium">{voter.name}</p>
+                    <p className="text-xs font-mono text-muted-foreground">
+                      NID: {voter.nid || "—"}
+                    </p>
+                  </div>
+                  <Checkbox
+                    checked={voter.will_vote}
+                    onChange={() => handleToggleWillVote(voter.id, voter.will_vote)}
+                    disabled={updatingVoters.has(voter.id)}
+                  />
+                </div>
                 
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <p className="text-sm text-muted-foreground">
@@ -216,6 +277,7 @@ export default function CandidateVotersPage() {
               <TableHeader>
                 <TableRow>
                   <TableHead>Name</TableHead>
+                  <TableHead>Will Vote</TableHead>
                   <TableHead>Present Location</TableHead>
                   <TableHead>Phone</TableHead>
                 </TableRow>
@@ -223,14 +285,26 @@ export default function CandidateVotersPage() {
               <TableBody>
                 {filteredVoters.length === 0 && (
                   <TableRow>
-                    <TableCell colSpan={3} className="text-center text-muted-foreground">
+                    <TableCell colSpan={4} className="text-center text-muted-foreground">
                       {voters.length === 0 ? "No voters available." : "No voters match your search."}
                     </TableCell>
                   </TableRow>
                 )}
                 {filteredVoters.map((voter) => (
                   <TableRow key={voter.id}>
-                    <TableCell className="font-medium">{voter.name}</TableCell>
+                    <TableCell>
+                      <div className="font-medium">{voter.name}</div>
+                      <div className="text-xs font-mono text-muted-foreground">
+                        NID: {voter.nid || "—"}
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <Checkbox
+                        checked={voter.will_vote}
+                        onChange={() => handleToggleWillVote(voter.id, voter.will_vote)}
+                        disabled={updatingVoters.has(voter.id)}
+                      />
+                    </TableCell>
                     <TableCell className="text-muted-foreground">
                       {voter.present_location || "—"}
                     </TableCell>

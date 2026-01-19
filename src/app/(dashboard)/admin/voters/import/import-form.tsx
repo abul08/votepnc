@@ -51,7 +51,7 @@ export function ImportForm() {
       <CardHeader>
         <CardTitle className="text-base sm:text-lg">CSV Import</CardTitle>
         <CardDescription className="text-xs sm:text-sm">
-          Upload a CSV with columns: sumaaru, name, address, phone, sex, nid, present_location, registered_box, job_in, job_by
+          Upload a CSV with columns: sumaaru, name, address, phone, sex (Gender), nid, present_location, registered_box, job_in, job_by
         </CardDescription>
       </CardHeader>
       <CardContent>

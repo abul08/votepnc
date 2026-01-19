@@ -20,53 +20,40 @@ export async function GET() {
       .eq("id", user.id)
       .single();
     
-    if (userData?.role !== "candidate") {
+    if (userData?.role !== "admin") {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
-    // Get candidate info
-    const { data: candidate } = await adminClient
-      .from("candidates")
-      .select("id, name, candidate_number, position")
-      .eq("user_id", user.id)
-      .maybeSingle();
-
-    if (!candidate) {
-      return NextResponse.json({ error: "Candidate not found" }, { status: 404 });
-    }
-
-    // Get all voters with only the needed fields
+    // Get all voters
     const { data: voters } = await adminClient
       .from("voters")
-      .select("id, name, nid, phone, present_location")
+      .select("*")
+      .order("created_at", { ascending: false });
+
+    // Get all candidates
+    const { data: candidates } = await adminClient
+      .from("candidates")
+      .select("id, name, candidate_number, position")
       .order("name", { ascending: true });
 
-    // Get voting preferences for this candidate
+    // Get all voting preferences
     const { data: preferences } = await adminClient
       .from("voter_voting_preferences")
-      .select("voter_id, will_vote")
-      .eq("candidate_id", candidate.id);
+      .select("candidate_id, voter_id, will_vote");
 
-    // Create a map of voter_id -> will_vote
-    const preferencesMap = new Map<string, boolean>();
+    // Create a map: voter_id -> candidate_id -> will_vote
+    const preferencesMap = new Map<string, Map<string, boolean>>();
     preferences?.forEach((pref) => {
-      preferencesMap.set(pref.voter_id, pref.will_vote);
+      if (!preferencesMap.has(pref.voter_id)) {
+        preferencesMap.set(pref.voter_id, new Map());
+      }
+      preferencesMap.get(pref.voter_id)!.set(pref.candidate_id, pref.will_vote);
     });
 
-    // Merge voters with their voting preferences
-    const votersWithPreferences = voters?.map((voter) => ({
-      ...voter,
-      will_vote: preferencesMap.get(voter.id) ?? false,
-    })) ?? [];
-
     return NextResponse.json({
-      voters: votersWithPreferences,
-      candidate: {
-        id: candidate.id,
-        name: candidate.name,
-        candidate_number: candidate.candidate_number,
-        position: candidate.position,
-      },
+      voters: voters ?? [],
+      candidates: candidates ?? [],
+      preferences: preferences ?? [],
     });
   } catch (error) {
     return NextResponse.json(
