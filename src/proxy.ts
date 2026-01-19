@@ -61,7 +61,14 @@ export async function proxy(request: NextRequest) {
   });
 
   // Refresh the session first to ensure cookies are read
-  const { data: sessionData } = await supabase.auth.getSession();
+  const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+  
+  // Check if session is invalid (but not expired - inactivity is handled client-side)
+  if (sessionError || !sessionData?.session) {
+    const redirectUrl = request.nextUrl.clone();
+    redirectUrl.pathname = "/login";
+    return NextResponse.redirect(redirectUrl);
+  }
   
   const {
     data: { user },

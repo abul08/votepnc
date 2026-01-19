@@ -2,6 +2,7 @@ import Link from "next/link";
 
 import { getUserRole, requireUser } from "@/lib/auth";
 import { LogoutButton } from "@/components/logout-button";
+import { SessionMonitor } from "@/components/session-monitor";
 
 export default async function DashboardLayout({
   children,
@@ -58,6 +59,7 @@ export default async function DashboardLayout({
       )}
 
       <main className="px-4 sm:px-6 py-4 sm:py-6">{children}</main>
+      <SessionMonitor />
     </div>
   );
 }
