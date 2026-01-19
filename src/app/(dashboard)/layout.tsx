@@ -19,7 +19,6 @@ export default async function DashboardLayout({
           { href: "/admin/candidates", label: "Candidates" },
           { href: "/admin/voters", label: "Voters" },
           { href: "/admin/voters/import", label: "Import" },
-          { href: "/admin/edit-requests", label: "Approvals" },
           { href: "/admin/activity", label: "Activity" },
         ]
       : [
